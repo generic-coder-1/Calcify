@@ -1,4 +1,9 @@
-use std::{cell::RefCell, collections::{HashMap, VecDeque}, fmt::Debug, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet, VecDeque},
+    fmt::Debug,
+    rc::Rc,
+};
 
 #[derive(Clone, Debug)]
 pub enum Expr {
@@ -8,6 +13,7 @@ pub enum Expr {
     Return(Box<Expr>),
     Variable(String),
     Call(String, Vec<Expr>),
+    Function(Vec<(String, ValueType)>, Box<Expr>),
 }
 
 #[derive(Clone, Debug)]
@@ -17,7 +23,11 @@ pub enum Value {
     String(String),
     Bool(bool),
     Float(f32),
-    Function(Vec<(String, ValueType)>, Box<Expr>),
+    Function(
+        Vec<(String, ValueType)>,
+        Box<Expr>,
+        Environment<Value>,
+    ),
 }
 
 impl Value {
@@ -28,13 +38,46 @@ impl Value {
             Value::String(_) => ValueType::String,
             Value::Bool(_) => ValueType::Bool,
             Value::Float(_) => ValueType::Float,
-            Value::Function(inps, body) => ValueType::Function(
+            Value::Function(inps, body, captured_env) => ValueType::Function(
                 inps.iter().map(|inp| inp.1.clone()).collect(),
-                Box::new({
-                    let mut env = Environment::new();
-                    inps.iter().for_each(|(var_name,var_type)|env.set(var_name.clone(), Rc::new(RefCell::new(var_type.clone()))));
-                    body.get_result_type(&mut env)
-                }?.borrow().clone()),
+                Box::new(
+                    {
+                        let mut env = Environment::<ValueType> {
+                            layers:
+                                captured_env
+                                    .layers
+                                    .iter()
+                                    .map(|layer| {
+                                        layer
+                                                .iter()
+                                                .map(|(name, value)| {
+                                                    value.borrow().get_type().and_then(
+                                                        |value_type| {
+                                                            Ok((
+                                                                name.clone(),
+                                                                Rc::new(RefCell::new(value_type)),
+                                                            ))
+                                                        },
+                                                    )
+                                                })
+                                                .collect::<Result<
+                                                    HashMap<String, Rc<RefCell<ValueType>>>,
+                                                    String,
+                                                >>()
+                                    })
+                                    .collect::<Result<
+                                        VecDeque<HashMap<String, Rc<RefCell<ValueType>>>>,
+                                        String,
+                                    >>()?,
+                        };
+                        inps.iter().for_each(|(var_name, var_type)| {
+                            env.set(var_name.clone(), Rc::new(RefCell::new(var_type.clone())))
+                        });
+                        body.get_result_type(&mut env)
+                    }?
+                    .borrow()
+                    .clone(),
+                ),
             ),
         })
     }
@@ -50,19 +93,22 @@ pub enum ValueType {
     Function(Vec<ValueType>, Box<ValueType>),
 }
 
-#[derive(Debug)]
-pub struct Environment<T:Debug> {
+#[derive(Debug, Clone)]
+pub struct Environment<T: Debug> {
     layers: VecDeque<HashMap<String, Rc<RefCell<T>>>>,
 }
 
-impl<T:Debug> Environment<T> {
+impl<T: Debug> Environment<T> {
     pub fn new() -> Self {
         Self {
             layers: VecDeque::from([HashMap::new()]),
         }
     }
     fn get(&self, var_name: &String) -> Option<Rc<RefCell<T>>> {
-        self.layers.iter().find_map(|values| values.get(var_name)).cloned()
+        self.layers
+            .iter()
+            .find_map(|values| values.get(var_name))
+            .cloned()
     }
     fn set(&mut self, var_name: String, var_value: Rc<RefCell<T>>) {
         self.layers
@@ -88,7 +134,7 @@ impl Expr {
                 let result = exprs
                     .iter()
                     .map(|expr| {
-                        if let Expr::Return(expr) = expr {
+                        if let Expr::Return(expr) = &*expr {
                             Err(expr.eval(env))
                         } else {
                             match expr.eval(env) {
@@ -112,8 +158,8 @@ impl Expr {
             Expr::Call(func_name, exprs) => {
                 let p_var = env.get(func_name);
                 if let Some(p_func) = p_var {
-                    let p_func = p_func.borrow().clone();
-                    if let Value::Function(inputs, body) = p_func {
+                    let mut p_func = RefCell::borrow_mut(&p_func);
+                    if let Value::Function(ref inputs, ref body, ref mut closure_env) = *p_func {
                         if inputs.len() != exprs.len() {
                             return Err(format!(
                                 "Function \"{func_name}\" takes {} input(s) but was given {}",
@@ -121,9 +167,9 @@ impl Expr {
                                 exprs.len()
                             ));
                         }
-                        env.push();
+                        closure_env.push();
                         inputs.iter().zip(exprs.iter()).map(|(inp,expr)|{
-                            let value = expr.eval(env)?;
+                            let value = expr.eval(closure_env)?;
                             let value_type = value.borrow().get_type()?;
                             if value_type == inp.1{
                                 env.set(inp.0.clone(), value);
@@ -132,8 +178,8 @@ impl Expr {
                             }
                             Ok(())
                         }).collect::<Result<Vec<()>,String>>()?;
-                        let return_val = body.eval(env);
-                        env.pop();
+                        let return_val = body.eval(closure_env);
+                        closure_env.pop();
                         return_val
                     } else {
                         Err(format!("Variable \"{func_name}\" isn't a function"))
@@ -145,9 +191,77 @@ impl Expr {
             Expr::Variable(var_name) => env
                 .get(var_name)
                 .ok_or(format!("Variable \"{var_name}\" doesn't exist")),
+            Expr::Function(inps, body) => {
+                fn get_outside_vars(
+                    expr: &Expr,
+                    mut outside_vars: Vec<(String, Rc<RefCell<Value>>)>,
+                    inside_vars: &mut HashSet<String>,
+                    env: &Environment<Value>,
+                ) -> Result<Vec<(String, Rc<RefCell<Value>>)>, String> {
+                    match expr {
+                        Expr::Literal(_) => Ok(outside_vars),
+                        Expr::Body(exprs) => {
+                            let mut new_outside_vars = outside_vars;
+                            for expr in exprs {
+                                new_outside_vars =
+                                    get_outside_vars(&expr, new_outside_vars, inside_vars, env)?;
+                            }
+                            Ok(new_outside_vars)
+                        }
+                        Expr::Asignment(internal_var, expr) => {
+                            inside_vars.insert(internal_var.clone());
+                            get_outside_vars(&expr, outside_vars, inside_vars, env)
+                        }
+                        Expr::Return(expr) => {
+                            get_outside_vars(&expr, outside_vars, inside_vars, env)
+                        }
+                        Expr::Variable(var_name) => {
+                            if !inside_vars.contains(var_name) {
+                                outside_vars.push((
+                                    var_name.clone(),
+                                    env.get(&var_name)
+                                        .ok_or(format!("Variable \"{var_name}\" doesn't exist"))?,
+                                ))
+                            }
+                            Ok(outside_vars)
+                        }
+                        Expr::Call(_, inps) => {
+                            let mut new_outside_vars = outside_vars;
+                            for expr in inps {
+                                new_outside_vars =
+                                    get_outside_vars(&expr, new_outside_vars, inside_vars, env)?;
+                            }
+                            Ok(new_outside_vars)
+                        }
+                        Expr::Function(inps, body) => {
+                            let mut nested_inside_vars = HashSet::new();
+                            inps.iter().for_each(|inp| {
+                                nested_inside_vars.insert(inp.0.clone());
+                            });
+                            get_outside_vars(&*body, outside_vars, &mut nested_inside_vars, env)
+                        }
+                    }
+                }
+                let mut nested_inside_vars = HashSet::new();
+                inps.iter().for_each(|inp| {
+                    nested_inside_vars.insert(inp.0.clone());
+                });
+                let mut func_env = Environment::new();
+                get_outside_vars(body, vec![], &mut nested_inside_vars, env)?
+                    .into_iter()
+                    .for_each(|var| func_env.set(var.0, var.1));
+                Ok(Rc::new(RefCell::new(Value::Function(
+                    inps.clone(),
+                    body.clone(),
+                    func_env,
+                ))))
+            }
         }
     }
-    fn get_result_type(&self,env:&mut Environment<ValueType>) -> Result<Rc<RefCell<ValueType>>, String> {
+    fn get_result_type(
+        &self,
+        env: &mut Environment<ValueType>,
+    ) -> Result<Rc<RefCell<ValueType>>, String> {
         Ok(match self {
             Expr::Literal(value) => Rc::new(RefCell::new(value.get_type()?)),
             Expr::Body(exprs) => exprs
@@ -178,20 +292,37 @@ impl Expr {
                 let result = expr.get_result_type(env)?;
                 env.set(name.clone(), result);
                 Rc::new(RefCell::new(ValueType::None))
-            },
+            }
             Expr::Return(expr) => expr.get_result_type(env)?,
-            Expr::Call(func_name, inps) => if let ValueType::Function(params, out) = &*env.get(func_name).ok_or(format!("Variable \"{func_name}\""))?.borrow(){
-                for (param, arg) in params.iter().zip(inps.iter()){
-                    let type_result = arg.get_result_type(env)?; 
-                    if *param != *type_result.borrow(){
-                        Err(format!("Expected input of type \"{:?}\", got input of type \"{:?}\"",param,arg.get_result_type(env)?))?
+            Expr::Call(func_name, inps) => {
+                if let ValueType::Function(params, out) = &*env
+                    .get(func_name)
+                    .ok_or(format!("Variable \"{func_name}\""))?
+                    .borrow()
+                {
+                    for (param, arg) in params.iter().zip(inps.iter()) {
+                        let type_result = arg.get_result_type(env)?;
+                        if *param != *type_result.borrow() {
+                            Err(format!(
+                                "Expected input of type \"{:?}\", got input of type \"{:?}\"",
+                                param,
+                                arg.get_result_type(env)?
+                            ))?
+                        }
                     }
+                    Rc::new(RefCell::new(*out.clone()))
+                } else {
+                    Err(format!("Variable \"{func_name}\" isn't a function"))?
                 }
-                Rc::new(RefCell::new(*out.clone()))
-            }else{
-                Err(format!("Variable \"{func_name}\" isn't a function"))?
-            },
-            Expr::Variable(var_name) => env.get(var_name).ok_or(format!("Variable \"{var_name}\" doesn't exist"))?.clone(),
+            }
+            Expr::Variable(var_name) => env
+                .get(var_name)
+                .ok_or(format!("Variable \"{var_name}\" doesn't exist"))?
+                .clone(),
+            Expr::Function(inps, body) => Rc::new(RefCell::new(ValueType::Function(
+                inps.iter().map(|inp| inp.1.clone()).collect(),
+                Box::new((*(body.get_result_type(env)?).borrow()).clone()),
+            ))),
         })
     }
 }

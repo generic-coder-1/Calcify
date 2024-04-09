@@ -3,15 +3,16 @@ use calcify::ast::{Environment, Expr, Value};
 fn main() {
     let a = Expr::Body(vec![
         Expr::Asignment("no".into(), Box::new(Expr::Literal(Value::Bool(true)))),
+        Expr::Asignment("yes".into(), Box::new(Expr::Variable("no".into()))),
         Expr::Asignment(
             "foo".into(),
             Box::new(Expr::Body(
                 vec![
                     Expr::Asignment("bar".into(), Box::new(Expr::Literal(Value::Int(90)))),
-                    Expr::Return(Box::new(Expr::Literal(Value::Function(
+                    Expr::Return(Box::new(Expr::Function(
                         vec![],
-                        Box::new(Expr::Return(Box::new(Expr::Variable("bar".into())))),
-                    ))))
+                        Box::new(Expr::Return(Box::new(Expr::Variable("bar".into())))) 
+                    )))
                 ]
             )),
         ),
