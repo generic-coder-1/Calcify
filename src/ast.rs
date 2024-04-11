@@ -23,11 +23,7 @@ pub enum Value {
     String(String),
     Bool(bool),
     Float(f32),
-    Function(
-        Vec<(String, ValueType)>,
-        Box<Expr>,
-        Environment<Value>,
-    ),
+    Function(Function),
 }
 
 impl Value {
@@ -38,13 +34,13 @@ impl Value {
             Value::String(_) => ValueType::String,
             Value::Bool(_) => ValueType::Bool,
             Value::Float(_) => ValueType::Float,
-            Value::Function(inps, body, captured_env) => ValueType::Function(
-                inps.iter().map(|inp| inp.1.clone()).collect(),
-                Box::new(
-                    {
-                        let mut env = Environment::<ValueType> {
-                            layers:
-                                captured_env
+            Value::Function(Function::UserFunction(inps, body, captured_env)) => {
+                ValueType::Function(
+                    inps.iter().map(|inp| inp.1.clone()).collect(),
+                    Box::new(
+                        {
+                            let mut env = Environment::<ValueType> {
+                                layers: captured_env
                                     .layers
                                     .iter()
                                     .map(|layer| {
@@ -69,16 +65,20 @@ impl Value {
                                         VecDeque<HashMap<String, Rc<RefCell<ValueType>>>>,
                                         String,
                                     >>()?,
-                        };
-                        inps.iter().for_each(|(var_name, var_type)| {
-                            env.set(var_name.clone(), Rc::new(RefCell::new(var_type.clone())))
-                        });
-                        body.get_result_type(&mut env)
-                    }?
-                    .borrow()
-                    .clone(),
-                ),
-            ),
+                            };
+                            inps.iter().for_each(|(var_name, var_type)| {
+                                env.set(var_name.clone(), Rc::new(RefCell::new(var_type.clone())))
+                            });
+                            body.get_result_type(&mut env)
+                        }?
+                        .borrow()
+                        .clone(),
+                    ),
+                )
+            }
+            Value::Function(Function::InbuiltFunction(inps, out, ..)) => {
+                ValueType::Function(inps.iter().map(|inp| inp.1.clone()).collect(), out.clone())
+            }
         })
     }
 }
@@ -91,6 +91,35 @@ pub enum ValueType {
     Bool,
     Float,
     Function(Vec<ValueType>, Box<ValueType>),
+}
+
+#[derive(Clone)]
+pub enum Function {
+    UserFunction(Vec<(String, ValueType)>, Box<Expr>, Environment<Value>),
+    InbuiltFunction(
+        Vec<(String, ValueType)>,
+        Box<ValueType>,
+        Rc<RefCell<dyn FnMut(Vec<Rc<RefCell<Value>>>) -> Result<Rc<RefCell<Value>>, String>>>,
+    ),
+}
+
+impl Debug for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UserFunction(arg0, arg1, arg2) => f
+                .debug_tuple("UserFunction")
+                .field(arg0)
+                .field(arg1)
+                .field(arg2)
+                .finish(),
+            Self::InbuiltFunction(arg0, arg1, ..) => f
+                .debug_tuple("InbuiltFunction")
+                .field(arg0)
+                .field(arg1)
+                .field(&"inbuilt_function".to_string())
+                .finish(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -120,7 +149,6 @@ impl<T: Debug> Environment<T> {
         self.layers.push_back(HashMap::new());
     }
     fn pop(&mut self) {
-        dbg!(&self);
         self.layers.pop_back();
     }
 }
@@ -159,28 +187,59 @@ impl Expr {
                 let p_var = env.get(func_name);
                 if let Some(p_func) = p_var {
                     let mut p_func = RefCell::borrow_mut(&p_func);
-                    if let Value::Function(ref inputs, ref body, ref mut closure_env) = *p_func {
-                        if inputs.len() != exprs.len() {
-                            return Err(format!(
-                                "Function \"{func_name}\" takes {} input(s) but was given {}",
-                                inputs.len(),
-                                exprs.len()
-                            ));
+                    if let Value::Function(ref mut func) = *p_func {
+                        match func{
+                            Function::UserFunction(ref inputs, ref body, ref mut closure_env) => {
+                                if inputs.len() != exprs.len() {
+                                    return Err(format!(
+                                        "Function \"{func_name}\" takes {} input(s) but was given {}",
+                                        inputs.len(),
+                                        exprs.len()
+                                    ));
+                                }
+                                closure_env.push();
+                                inputs.iter().zip(exprs.iter()).map(|(inp,expr)|{
+                                    let value = expr.eval(closure_env)?;
+                                    let value_type = value.borrow().get_type()?;
+                                    if value_type == inp.1{
+                                        env.set(inp.0.clone(), value);
+                                    }else{
+                                        return Err(format!("Input \"{}\" of function \"{}\" is supposed to be of type {:?} not {:?}",inp.0,func_name,value_type,inp.1))
+                                    }
+                                    Ok(())
+                                }).collect::<Result<Vec<()>,String>>()?;
+                                let return_val = body.eval(closure_env);
+                                closure_env.pop();
+                                return_val
+                            },
+                            Function::InbuiltFunction(inps, out, func) => {
+                                if inps.len() != exprs.len(){
+                                    return Err(format!("Function \"{}\" accepts {} input(s) but got {} input(s)",func_name,inps.len(),exprs.len()));
+                                }
+                                func.borrow_mut()(
+                                    exprs.iter()
+                                        .enumerate()
+                                        .map(|(i,expr)|{
+                                            expr.eval(env)
+                                            .and_then(|inp|{
+                                                let inp_type = inp.borrow().get_type()?;
+                                                 if inp_type == inps[i].1{
+                                                    Ok(inp)
+                                                }else{
+                                                    Err(format!("Input \"{}\" to function \"{}\" is supposed to be of type \"{:?}\" not \"{:?}\"",inps[i].0,func_name,inps[i].1,inp_type))
+                                                }
+                                            })
+                                        }).collect::<Result<Vec<Rc<RefCell<Value>>>,String>>()?
+                                    ).and_then(|actual_output|{
+                                        let out_type = actual_output.borrow().get_type()?;
+                                        if out_type == **out{
+                                            Ok(actual_output)
+                                        }else{
+                                            Err(format!("Output to function \"{}\" is supposed to be of type \"{:?}\" not \"{:?}\"",func_name,out,out_type))
+                                        }
+                                    })
+                            },
                         }
-                        closure_env.push();
-                        inputs.iter().zip(exprs.iter()).map(|(inp,expr)|{
-                            let value = expr.eval(closure_env)?;
-                            let value_type = value.borrow().get_type()?;
-                            if value_type == inp.1{
-                                env.set(inp.0.clone(), value);
-                            }else{
-                                return Err(format!("Input \"{}\" of function \"{}\" is supposed to be of type {:?} not {:?}",inp.0,func_name,value_type,inp.1))
-                            }
-                            Ok(())
-                        }).collect::<Result<Vec<()>,String>>()?;
-                        let return_val = body.eval(closure_env);
-                        closure_env.pop();
-                        return_val
                     } else {
                         Err(format!("Variable \"{func_name}\" isn't a function"))
                     }
@@ -251,9 +310,7 @@ impl Expr {
                     .into_iter()
                     .for_each(|var| func_env.set(var.0, var.1));
                 Ok(Rc::new(RefCell::new(Value::Function(
-                    inps.clone(),
-                    body.clone(),
-                    func_env,
+                    Function::UserFunction(inps.clone(), body.clone(), func_env.clone()),
                 ))))
             }
         }
