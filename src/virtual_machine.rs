@@ -26,7 +26,6 @@ impl<'a> VirtualMachine<'a> {
             stack: vec![],
         };
         while let Ok(instruction) = vm.read_byte() {
-            dbg!(TryInto::<ByteCode>::try_into(instruction));
             match TryInto::<ByteCode>::try_into(instruction) {
                 Ok(byte_code) => {
                     match byte_code {

@@ -1,5 +1,7 @@
 use calcify::{chunk::{ByteCode, Chunk}, scanner::Scanner, virtual_machine::VirtualMachine};
 
+
+const TEN:i32 = 10;
 fn main() {
     // dbg!('_'.is_alphanumeric());
     // let mut chunk = Chunk::new();

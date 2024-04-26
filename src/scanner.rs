@@ -59,6 +59,8 @@ pub enum TokenType {
     True,
     False,
     Trait,
+    And,
+    Or,
     //other stuff
     Error,
     EOF,
@@ -150,6 +152,8 @@ impl Scanner {
             'I'=>self.check_keyword("dent", TokenType::Impl)?,
             'e'=>self.check_keyword("lse", TokenType::Else)?,
             'E'=>self.check_keyword("num", TokenType::Enum)?,
+            'a'=>self.check_keyword("nd", TokenType::And)?,
+            'o'=>self.check_keyword("r", TokenType::Or)?,
             'f'=>{
                 match self.advance()?{
                     'a'=>self.check_keyword("lse", TokenType::False)?,
