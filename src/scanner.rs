@@ -61,6 +61,7 @@ pub enum TokenType {
     Trait,
     And,
     Or,
+    Gen,
     //other stuff
     Error,
     EOF,
@@ -165,6 +166,7 @@ impl Scanner {
             's'=>self.check_keyword("elf", TokenType::SelfCal)?,
             'T'=>self.check_keyword("rait", TokenType::Trait)?,
             't'=>self.check_keyword("rue", TokenType::True)?,
+            'g'=>self.check_keyword("en", TokenType::Gen)?,
             a if a.is_numeric() => {
                 self.extract_numeric()
             },
