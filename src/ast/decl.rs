@@ -1,4 +1,6 @@
 use crate::scanner::Token;
+
+use super::statments::{Block, Statment};
 pub struct Program{
     code:Vec<Declaration>
 }
@@ -33,8 +35,8 @@ pub struct FuncSig{
 }
 
 pub struct FunctionDecl{
-    sig:FuncSig
-    //body:Vec<Statment>,
+    sig:FuncSig,
+    body:Block,
 }
 
 pub struct EnumDecl{
