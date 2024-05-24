@@ -1,6 +1,6 @@
 use crate::scanner::Token;
 
-use super::statments::Statment;
+use super::{parser::Parsable, statments::Statment};
 
 #[derive(Debug,Clone)]
 pub enum Expresion{
@@ -11,17 +11,17 @@ pub enum Expresion{
     False,
     FunctionCall(FuncCall),
     VarAccess(VarAccess),
-    Binary(Binary),
+    Product(Binary),
     Unary(Unary),
     Parens(Parens),
     Block(Block),
-    FeildAcess(FieldAccess)
+    FieldAcess(FieldAccess)
 }
 
 #[derive(Debug,Clone)]
 pub struct FieldAccess{
     expr:Box<Expresion>,
-    feild:Token, //Ident
+    field:Token, //Ident
 }
 
 pub type Block=Vec<Statment>;
@@ -69,4 +69,10 @@ pub enum BinaryOp{
     Equal,
     LogicalAnd,
     LogicalOr,
+}
+
+impl Parsable for Expresion{
+    fn parse(tokens: &mut std::iter::Peekable<std::slice::Iter<Token>>)->Result<Self,super::parser::ParseError> {
+        todo!()
+    }
 }

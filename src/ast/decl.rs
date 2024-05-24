@@ -4,7 +4,7 @@ use crate::scanner::{Token, TokenType};
 
 use super::{
     expresions::Block,
-    parser::{Parsable, ParseError, ParseResult, TokenExt}, statments::Statment,
+    parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}, statments::Statment,
 };
 #[derive(Debug, Clone)]
 pub struct Program {
@@ -82,7 +82,13 @@ pub struct FieldDecl {
 }
 
 #[derive(Debug, Clone)]
-pub struct Type {
+pub enum Type{
+    Singular(SolidType),
+    Tuple(Vec<Type>)
+} 
+
+#[derive(Debug, Clone)]
+pub struct SolidType{
     name: Token, //Ident or Self
     generics: Vec<Type>,
 }
@@ -93,7 +99,7 @@ impl Parsable for Program {
             code: {
                 let mut code = vec![];
                 while let Some(Token { token_type, .. }) = tokens.peek() {
-                    if TokenType::EOF != *token_type {
+                    if TokenType::EOF == *token_type {
                         break;
                     };
                     code.push(Declaration::parse(tokens)?);
@@ -207,8 +213,11 @@ impl Parsable for FuncSig {
             TokenType::Comma,
             TokenType::RParen,
         )?;
-        tokens.consume(TokenType::SmallArrow)?;
-        let out = Type::parse(tokens)?;
+        let out = if tokens.peek_consume(TokenType::SmallArrow).is_ok(){
+            Type::parse(tokens)?
+        }else{
+            Type::Tuple(vec![])
+        };
         Ok(Self {
             name,
             generics,
@@ -221,7 +230,7 @@ impl Parsable for FuncSig {
 impl Parsable for (Token, Type) {
     fn parse(tokens: &mut Peekable<Iter<Token>>) -> Result<Self, ParseError> {
         let name = tokens.consume(TokenType::Ident)?;
-        tokens.consume(TokenType::Comma)?;
+        tokens.consume(TokenType::Colon)?;
         let type_ = Type::parse(tokens)?;
         Ok((name, type_))
     }
@@ -277,19 +286,7 @@ impl Parsable for StructDecl {
             TokenType::Comma,
             TokenType::RArrow,
         )?;
-        let mut fields = vec![];
-        tokens.consume(TokenType::LBrace)?;
-        if tokens.peek_consume(TokenType::RBrace).is_err() {
-            loop {
-                fields.push(FieldDecl::parse(tokens)?);
-                if tokens.peek_consume(TokenType::Comma).is_ok() {
-                    continue;
-                }
-                tokens.consume(TokenType::RBrace)?;
-                break;
-            }
-        }
-        tokens.consume(TokenType::RBrace)?;
+        let fields = tokens.list_parse(TokenType::LBrace, TokenType::Comma, TokenType::RBrace)?;
         Ok(Self {
             name: name,
             generics,
@@ -313,8 +310,15 @@ impl Parsable for FieldDecl {
 impl Parsable for GenericDecl {
     fn parse(tokens: &mut Peekable<Iter<Token>>) -> ParseResult<Self> {
         let name = tokens.peek_consume(TokenType::Ident)?;
-        let constraints = if tokens.peek_consume(TokenType::Comma).is_ok() {
-            tokens.list_parse::<Type>(TokenType::LArrow, TokenType::Comma, TokenType::RArrow)?
+        let constraints = if tokens.peek_consume(TokenType::Colon).is_ok() {
+            let mut temp = vec![];
+            loop{
+                temp.push(Type::parse(tokens)?);
+                if tokens.peek_consume(TokenType::Plus).is_err(){
+                    break;
+                }
+            }
+            temp
         } else {
             vec![]
         };
@@ -327,6 +331,16 @@ impl Parsable for GenericDecl {
 
 impl Parsable for Type {
     fn parse(tokens: &mut Peekable<Iter<Token>>) -> ParseResult<Self> {
+        Ok(if tokens.peek().cannot_end().token_type == TokenType::LParen{
+            Self::Tuple(tokens.list_parse(TokenType::LParen, TokenType::Comma, TokenType::RParen)?)
+        }else{
+            Self::Singular(SolidType::parse(tokens)?)
+        })
+    }
+}
+
+impl Parsable for SolidType{
+    fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,ParseError> {
         let type_ = tokens.peek_consume_multiple(vec![TokenType::Ident, TokenType::SelfCal])?;
         let generics = tokens.optional_list_parse::<Type>(
             TokenType::LArrow,

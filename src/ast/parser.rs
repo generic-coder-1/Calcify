@@ -82,7 +82,7 @@ impl TokenExt for Peekable<Iter<'_,Token>>{
     }
 }
 
-trait Wrapper<T>{
+pub trait Wrapper<T>{
     fn cannot_end(self)->T;
 }
 

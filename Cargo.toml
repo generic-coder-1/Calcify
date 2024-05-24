@@ -7,6 +7,5 @@ edition = "2021"
 
 [dependencies]
 clap = "4.5.4"
-dyn-clone = "1.0.17"
 strum = "0.26.2"
 strum_macros = "0.26.2"
