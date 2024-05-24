@@ -18,12 +18,11 @@ pub enum TokenType {
     Comma,
     SemiColon,
     Colon,
-    Star,
     Dot,
     Bang,
     At,
-    Ampersand,
     Equal,
+    Pipe,
     //scope stuff
     LBrace,
     RBrace,
@@ -44,7 +43,8 @@ pub enum TokenType {
     //idents
     Ident,
     String,
-    Num,
+    Int,
+    Float,
     //Keywords
     Fn,
     Struct,
@@ -63,6 +63,7 @@ pub enum TokenType {
     Or,
     Gen,
     Mut,
+    For,
     //other stuff
     Error,
     EOF,
@@ -129,12 +130,11 @@ impl Scanner {
             ']'=>TokenType::RBrack,
             '{'=>TokenType::LBrace,
             '}'=>TokenType::RBrace,
-            '*'=>TokenType::Star,
-            '&'=>TokenType::Ampersand,
             '@'=>TokenType::At,
             '.'=>TokenType::Dot,
             ':'=>TokenType::Colon,
             ','=>TokenType::Comma,
+            '|'=>TokenType::Pipe,
             '+'=>either!(self.check('=') => TokenType::PlusEqual;   TokenType::Plus),
             '='=>either!(self.check('=') => TokenType::EqualEqual;  TokenType::Equal),
             '<'=>either!(self.check('=') => TokenType::LessOrEqual; TokenType::LArrow),
@@ -160,6 +160,7 @@ impl Scanner {
                 match self.advance()?{
                     'a'=>self.check_keyword("lse", TokenType::False)?,
                     'n'=>self.check_keyword("", TokenType::Fn)?,
+                    'o'=>self.check_keyword("r", TokenType::For)?,
                     _=>self.extract_ident()
                 }
             }
@@ -178,6 +179,9 @@ impl Scanner {
             '"'=>{
                 loop{
                     if let Some(char) = self.advance(){
+                        if char == '\\'{
+                            continue;
+                        }
                         if char!='"'{
                             continue;
                         }else{
@@ -231,13 +235,13 @@ impl Scanner {
                 Some(char) =>{
                     if char.is_numeric(){self.advance();continue;}
                     if char == '.'{self.advance();break;}
-                    return TokenType::Num;
+                    return TokenType::Int;
                 },
-                None=>{return TokenType::Num;},
+                None=>{return TokenType::Int;},
             } 
         }
         while self.peek(0).and_then(|char|if char.is_numeric(){Some(())}else{None}).is_some(){self.advance();};
-        TokenType::Num
+        TokenType::Float
     }
     fn check(&mut self, char:char)->bool{
         match self.peek(0) {

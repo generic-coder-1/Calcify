@@ -2,13 +2,11 @@ use crate::scanner::Token;
 
 use super::{decl::{FunctionDecl, Type}, expresions::Expresion};
 
+#[derive(Debug,Clone)]
 pub enum Statment{
-    //FuncCall(FuncCall), move to expresoin
-    //VarAccess(VarAccess), move to expression
     VarCreation(VarCreation),
     FuncCreation(FunctionDecl),
     VarAssignment(VarAssignment),
-    Block(Block),
     Expresion(Expresion),
     If(If),
     While(While),
@@ -19,16 +17,19 @@ pub enum Statment{
 
 pub type Return = Expresion;
 
+#[derive(Debug,Clone)]
 pub struct While{
     condition:Expresion,
     statment:Box<Statment>,
 }
 
+#[derive(Debug,Clone)]
 pub struct If{
     conditionals_and_statments:Vec<(IfType,Statment)>,
     else_statment:Option<Box<Statment>>,
 }
 
+#[derive(Debug,Clone)]
 pub enum IfType{
     Boolean(Expresion),
     IfLet{
@@ -37,12 +38,14 @@ pub enum IfType{
     }
 }
 
+#[derive(Debug,Clone)]
 pub struct Pattern{
     type_of:Type,
     varient:Option<Token>,//Ident
     comstructor:Vec<(Token,Option<Pattern>)>,//Ident
 }
 
+#[derive(Debug,Clone)]
 pub struct VarCreation{
     mutable:bool,
     name:Token, // Ident
@@ -50,19 +53,9 @@ pub struct VarCreation{
     value:Box<Statment>,
 }
 
-
-//move to expresion
-// pub struct FuncCall{
-//     call_from:Option<Box<Statment>>,
-//     func_name_to_call:Token, //Ident
-//     args:Vec<Statment>,
-// }
-
-//pub type VarAccess = Token; // Ident move to expresion
-
+#[derive(Debug,Clone)]
 pub struct VarAssignment{
     name:Token, //Ident
     value:Box<Statment>
 }
 
-pub type Block=Vec<Statment>;
