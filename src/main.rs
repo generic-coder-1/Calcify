@@ -22,6 +22,7 @@ fn main() {
             print<String>("kys");
             return 0
         }
+        while false a+b;
     }
     "#.to_string());
     dbg!(&tokens);
