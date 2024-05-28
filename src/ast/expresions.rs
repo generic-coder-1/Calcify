@@ -2,7 +2,7 @@ use std::{iter::Peekable, slice::Iter};
 
 use crate::scanner::{Token, TokenType};
 
-use super::{parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}, statments::Statment};
+use super::{decl::Type, parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}};
 
 #[derive(Debug,Clone)]
 pub enum Expresion{
@@ -16,7 +16,6 @@ pub enum Expresion{
     FieldAcess(FieldAccess),
     Index(Index),
     Parens(Parens),
-    Block(Block),
     Unary(Unary),
     Binary(Binary),
 }
@@ -35,8 +34,6 @@ pub struct FieldAccess{
     field:Token, //Ident
 }
 
-pub type Block=Vec<Statment>;
-
 pub type Parens = Box<Expresion>;
 
 #[derive(Debug,Clone)]
@@ -54,6 +51,7 @@ pub enum UnaryOp{
 #[derive(Debug,Clone)]
 pub struct FuncCall{
     function:Box<Expresion>,
+    generics:Vec<Type>,
     arguments:Vec<Expresion>,
 }
 
@@ -234,14 +232,13 @@ impl Expresion{
             TokenType::Ident => Self::VarAccess(tokens.next().expect("we just checked that there is another token").clone()),
             TokenType::True => {tokens.next();Self::True},
             TokenType::False => {tokens.next();Self::False},
-            TokenType::LBrace => {tokens.next();Self::Block({let mut temp = vec![];while tokens.peek_consume(TokenType::RBrace).is_err(){temp.push(Statment::parse(tokens)?)}temp})},
             TokenType::LParen=> {
                 tokens.consume(TokenType::LParen)?;
                 let expr = Expresion::parse(tokens)?;
                 tokens.consume(TokenType::RParen)?;
                 expr
             }
-            _=>Err(ParseError{ expected: vec![TokenType::Minus,TokenType::Int,TokenType::Float,TokenType::String,TokenType::Ident,TokenType::True,TokenType::False,TokenType::LBrace], got: tokens.next().unwrap().clone() })?
+            _=>Err(ParseError{ expected: vec![TokenType::Minus,TokenType::Int,TokenType::Float,TokenType::String,TokenType::Ident,TokenType::True,TokenType::False], got: tokens.next().unwrap().clone() })?
         };
         loop {
             match tokens.peek(){
@@ -251,9 +248,15 @@ impl Expresion{
                             tokens.next();
                             expr = Self::FieldAcess(FieldAccess { expr:Box::new(expr), field: tokens.consume(TokenType::Ident)? });
                         },
-                        TokenType::LParen => {
+                        TokenType::LArrow =>{
+                            let generics = tokens.list_parse(TokenType::LArrow, TokenType::Comma, TokenType::RArrow)?;
                             let arguments = tokens.list_parse(TokenType::LParen, TokenType::Comma, TokenType::RParen)?;
-                            expr = Self::FunctionCall(FuncCall { function: Box::new(expr), arguments })
+                            expr = Self::FunctionCall(FuncCall { function: Box::new(expr), generics, arguments })
+                        }
+                        TokenType::LParen => {
+                            let generics = vec![];
+                            let arguments = tokens.list_parse(TokenType::LParen, TokenType::Comma, TokenType::RParen)?;
+                            expr = Self::FunctionCall(FuncCall { function: Box::new(expr), generics, arguments })
                         }
                         TokenType::LBrack => {
                             tokens.next();

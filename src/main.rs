@@ -14,7 +14,16 @@ fn main() {
     // chunk.disassemble("test code");
     // println!("== end of test code ==\n\n");
     // dbg!(VirtualMachine::run(&chunk));
-    let tokens = Scanner::scan("fn main(){}".to_string());
+    let tokens = Scanner::scan(
+    r#"
+    fn main()->Int{
+        let a = 2+3.not_a_func("hi")[0];
+        while true {
+            print<String>("kys");
+            return 0
+        }
+    }
+    "#.to_string());
     dbg!(&tokens);
     dbg!(Program::parse(&mut tokens.iter().peekable()));
 }

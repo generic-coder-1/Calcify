@@ -12,11 +12,13 @@ pub enum Statment{
     If(If),
     While(While),
     Return(Return),
+    Block(Block),
     Continue,
     Break, 
 }
 
 pub type Return = Option<Expresion>;
+pub type Block=Vec<Statment>;
 
 #[derive(Debug,Clone)]
 pub struct While{
@@ -64,9 +66,10 @@ impl Parsable for Statment{
             TokenType::If=>Self::If(If::parse(tokens)?),
             TokenType::While=>Self::While(While::parse(tokens)?),
             TokenType::Return=>Self::Return(Return::parse(tokens)?),
+            TokenType::LBrace => {tokens.next();Self::Block({let mut temp = vec![];while tokens.peek_consume(TokenType::RBrace).is_err(){temp.push(Statment::parse(tokens)?)}temp})},
             _=>{
                 let temp = Self::Expresion(Expresion::parse(tokens)?);
-                tokens.consume(TokenType::SemiColon);
+                tokens.consume(TokenType::SemiColon)?;
                 temp
             }
         })
@@ -160,6 +163,7 @@ impl Parsable for (Token, Option<Pattern>){
 
 impl Parsable for VarCreation{
     fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,super::parser::ParseError> {
+        tokens.consume(TokenType::Let)?;
         let mutable = tokens.peek_consume(TokenType::Mut).is_ok();
         let name = tokens.consume(TokenType::Ident)?;
         let type_of = if tokens.peek_consume(TokenType::Colon).is_ok(){
@@ -167,8 +171,8 @@ impl Parsable for VarCreation{
         }else{
             None
         };
+        tokens.consume(TokenType::Equal)?;
         let value = Box::new(Statment::parse(tokens)?);
-        tokens.consume(TokenType::SemiColon)?;
         Ok(Self{
             mutable,
             name,

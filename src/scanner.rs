@@ -277,8 +277,12 @@ impl Scanner {
                         continue;
                     }
                     if char == '.' {
-                        self.advance();
-                        break;
+                        if self.peek(1).unwrap_or(' ').is_numeric(){
+                            self.advance();
+                            break;
+                        }else{
+                            return TokenType::Int;
+                        }
                     }
                     return TokenType::Int;
                 }
