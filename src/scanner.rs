@@ -22,6 +22,8 @@ pub enum TokenType {
     At,
     Equal,
     Pipe,
+    Star,
+    Percent,
     //scope stuff
     LBrace,
     RBrace,
@@ -117,13 +119,13 @@ impl Scanner {
         {
             tokens.push(
                 scanner
-                    .scan_token()
+                    .scan_token(tokens.last().and_then(|token|Some(token.token_type == TokenType::Int || token.token_type == TokenType::Float)).unwrap_or(false))
                     .unwrap_or(scanner.gen_token(TokenType::EOF)),
             );
         }
         tokens
     }
-    fn scan_token(&mut self) -> Option<Token> {
+    fn scan_token(&mut self, is_last_numeric:bool) -> Option<Token> {
         loop {
             self.start = self.current;
             let p_whitespace = self.peek(0)?;
@@ -141,8 +143,10 @@ impl Scanner {
             '{' => TokenType::LBrace,
             '}' => TokenType::RBrace,
             '@' => TokenType::At,
+            '%' => TokenType::Percent,
             '.' => TokenType::Dot,
             ':' => TokenType::Colon,
+            '*' => TokenType::Star,
             ',' => TokenType::Comma,
             '|' => TokenType::Pipe,
             '+' => either!(self.check('=') => TokenType::PlusEqual;   TokenType::Plus),
@@ -151,7 +155,7 @@ impl Scanner {
             '>' => either!(self.check('=') => TokenType::MoreOrEqual; TokenType::RArrow),
             '!' => either!(self.check('=') => TokenType::BangEqual;   TokenType::Bang),
             '-' => {
-                if self.peek(0).unwrap_or(' ').is_numeric() {
+                if !is_last_numeric && self.peek(0).unwrap_or(' ').is_numeric(){
                     self.extract_numeric()
                 } else {
                     either!(self.check('=') => TokenType::MinusEqual;  either!(self.check('>') => TokenType::SmallArrow; TokenType::Minus))
