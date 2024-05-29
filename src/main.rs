@@ -1,4 +1,4 @@
-use calcify::{ast::{decl::Program, parser::Parsable}, chunk::{ByteCode, Chunk}, scanner::Scanner, virtual_machine::VirtualMachine};
+use calcify::{ast::{decl::Program, parser::Parsable}, scanner::Scanner};
 
 fn main() {
     // dbg!('_'.is_alphanumeric());
@@ -18,6 +18,7 @@ fn main() {
     r#"
     fn main()->Int{
         let a = 2+3.not_a_func("hi")[0];
+        a=5;
         while true {
             print<String>("kys");
             return 0

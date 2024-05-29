@@ -1,5 +1,7 @@
 use std::{iter::Peekable, slice::Iter};
 
+use pub_fields::pub_fields;
+
 use crate::scanner::{Token, TokenType};
 
 use super::{decl::Type, parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}};
@@ -21,7 +23,7 @@ pub enum Expresion{
 }
 
 #[derive(Debug,Clone)]
-
+#[pub_fields]
 pub struct Index{
     expr:Box<Expresion>,
     index:Box<Expresion>
@@ -29,6 +31,7 @@ pub struct Index{
 
 
 #[derive(Debug,Clone)]
+#[pub_fields]
 pub struct FieldAccess{
     expr:Box<Expresion>,
     field:Token, //Ident
@@ -37,6 +40,7 @@ pub struct FieldAccess{
 pub type Parens = Box<Expresion>;
 
 #[derive(Debug,Clone)]
+#[pub_fields]
 pub struct Unary{
     unary_op:UnaryOp,
     expr:Box<Expresion>,
@@ -49,6 +53,7 @@ pub enum UnaryOp{
 }
 
 #[derive(Debug,Clone)]
+#[pub_fields]
 pub struct FuncCall{
     function:Box<Expresion>,
     generics:Vec<Type>,
@@ -58,6 +63,7 @@ pub struct FuncCall{
 pub type VarAccess = Token;//Ident
 
 #[derive(Debug,Clone)]
+#[pub_fields]
 pub struct Binary{
     lhs:Box<Expresion>,
     rhs:Box<Expresion>,

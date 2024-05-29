@@ -1,5 +1,7 @@
 use std::{iter::Peekable, slice::Iter};
 
+use pub_fields::pub_fields;
+
 use crate::scanner::{Token, TokenType};
 
 use super::{decl::{FunctionDecl, Type}, expresions::Expresion, parser::{Parsable, ParseResult, TokenExt, Wrapper}};
@@ -21,12 +23,14 @@ pub type Return = Option<Expresion>;
 pub type Block=Vec<Statment>;
 
 #[derive(Debug,Clone)]
+#[pub_fields]
 pub struct While{
     condition:Expresion,
     statment:Box<Statment>,
 }
 
 #[derive(Debug,Clone)]
+#[pub_fields]
 pub struct If{
     conditionals_and_statments:Vec<(IfType,Statment)>,
     else_statment:Option<Box<Statment>>,
@@ -42,6 +46,7 @@ pub enum IfType{
 }
 
 #[derive(Debug,Clone)]
+#[pub_fields]
 pub struct Pattern{
     type_of:Type,
     varient:Option<Token>,//Ident
@@ -49,6 +54,7 @@ pub struct Pattern{
 }
 
 #[derive(Debug,Clone)]
+#[pub_fields]
 pub struct VarCreation{
     mutable:bool,
     name:Token, // Ident

@@ -1,11 +1,14 @@
 use std::{iter::Peekable, slice::Iter};
 
+use pub_fields::pub_fields;
+
 use crate::scanner::{Token, TokenType};
 
 use super::{
     parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}, statments::{Statment,Block},
 };
 #[derive(Debug, Clone)]
+#[pub_fields]
 pub struct Program {
     code: Vec<Declaration>,
 }
@@ -20,6 +23,7 @@ pub enum Declaration {
 }
 #[derive(Debug, Clone)]
 
+#[pub_fields]
 pub struct ImplDecl {
     generics: Vec<GenericDecl>,
     trait_to_impl: Option<Type>,
@@ -28,6 +32,7 @@ pub struct ImplDecl {
 }
 #[derive(Debug, Clone)]
 
+#[pub_fields]
 pub struct TraitDecl {
     name: Token, //Ident
     generics: Vec<GenericDecl>,
@@ -36,6 +41,7 @@ pub struct TraitDecl {
 
 #[derive(Debug, Clone)]
 
+#[pub_fields]
 pub struct FuncSig {
     name: Token, //Ident
     generics: Vec<GenericDecl>,
@@ -43,12 +49,14 @@ pub struct FuncSig {
     out: Type,
 }
 #[derive(Debug, Clone)]
+#[pub_fields]
 pub struct FunctionDecl {
     sig: FuncSig,
     body: Block,
 }
 
 #[derive(Debug, Clone)]
+#[pub_fields]
 pub struct EnumDecl {
     name: Token, //Ident
     generics: Vec<GenericDecl>,
@@ -56,12 +64,14 @@ pub struct EnumDecl {
 }
 
 #[derive(Debug, Clone)]
+#[pub_fields]
 pub struct VarientDecl {
     name: Token, //Ident
     fields: Vec<FieldDecl>,
 }
 
 #[derive(Debug, Clone)]
+#[pub_fields]
 pub struct StructDecl {
     name: Token, //Ident
     generics: Vec<GenericDecl>,
@@ -69,12 +79,14 @@ pub struct StructDecl {
 }
 
 #[derive(Debug, Clone)]
+#[pub_fields]
 pub struct GenericDecl {
     name: Token, //Ident
     constraints: Vec<Type>,
 }
 
 #[derive(Debug, Clone)]
+#[pub_fields]
 pub struct FieldDecl {
     name: Token, //Ident
     type_of: Type,
@@ -87,6 +99,7 @@ pub enum Type{
 } 
 
 #[derive(Debug, Clone)]
+#[pub_fields]
 pub struct SolidType{
     name: Token, //Ident or Self
     generics: Vec<Type>,
