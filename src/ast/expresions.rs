@@ -4,7 +4,7 @@ use pub_fields::pub_fields;
 
 use crate::scanner::{Token, TokenType};
 
-use super::{decl::Type, parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}};
+use super::{decl::Type, parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}, statments::{Block, Statment}};
 
 #[derive(Debug,Clone)]
 pub enum Expresion{
@@ -17,9 +17,38 @@ pub enum Expresion{
     FunctionCall(FuncCall),
     FieldAcess(FieldAccess),
     Index(Index),
+    StructConstructor(StructConstructor),
+    EnumConstructor(EnumConstructor),
+    ArrayConstructor(ArrayConstructor),
     Parens(Parens),
     Unary(Unary),
     Binary(Binary),
+    Block(Block),
+}
+
+
+pub type ArrayConstructor = Vec<Expresion>;
+
+#[derive(Debug,Clone)]
+#[pub_fields]
+pub struct EnumConstructor{
+    enum_name:Token, //Ident
+    varient_name:Token, //Ident
+    fields:Vec<FieldConstructor>
+}
+
+#[derive(Debug,Clone)]
+#[pub_fields]
+pub struct StructConstructor{
+    struct_name:Token, // Ident
+    fields:Vec<FieldConstructor>,
+}
+
+#[derive(Debug,Clone)]
+#[pub_fields]
+pub struct FieldConstructor{
+    name:Token, //Ident
+    value:Box<Expresion>,
 }
 
 #[derive(Debug,Clone)]
@@ -86,9 +115,11 @@ pub enum BinaryOp{
     LogicalAnd,
     LogicalOr, 
     Assign,
+    BitwiseOr,
+    BitwiseAnd,
+    SHL,
+    SHR,
 }
-
-
 
 impl Parsable for Expresion{
     fn parse(tokens: &mut Peekable<Iter<Token>>)->ParseResult<Self> {
@@ -150,6 +181,10 @@ impl Parsable for BinaryOp{
             TokenType::And,
             TokenType::Or,
             TokenType::Equal,
+            TokenType::Ampersand,
+            TokenType::Pipe,
+            TokenType::SHL,
+            TokenType::SHR,
         ])?.token_type{
             TokenType::Plus=>Self::Add,
             TokenType::Minus=>Self::Subtract,
@@ -165,6 +200,10 @@ impl Parsable for BinaryOp{
             TokenType::And=>Self::LogicalAnd,
             TokenType::Or=>Self::LogicalOr,
             TokenType::Equal=>Self::Assign,
+            TokenType::Ampersand=>Self::BitwiseAnd,
+            TokenType::Pipe=>Self::BitwiseOr,
+            TokenType::SHL=>Self::SHL,
+            TokenType::SHR=>Self::SHR,
             _=>unreachable!()
         })
     }
@@ -186,17 +225,23 @@ impl BinaryOp{
             TokenType::BangEqual|
             TokenType::And|
             TokenType::Or|
+            TokenType::SHL|
+            TokenType::SHR|
             TokenType::Equal => true,
             _=>false,
         }
     }
     fn precedence(&self)->u8{
         match self{
-            BinaryOp::Mod => 7,
-            BinaryOp::Mult => 6,
-            BinaryOp::Div => 6,
-            BinaryOp::Subtract => 5,
-            BinaryOp::Add => 5,
+            BinaryOp::Mod => 9,
+            BinaryOp::Mult => 9,
+            BinaryOp::Div => 9,
+            BinaryOp::Subtract => 8,
+            BinaryOp::Add => 8,
+            BinaryOp::SHL => 7,
+            BinaryOp::SHR => 7,
+            BinaryOp::BitwiseAnd=>6,
+            BinaryOp::BitwiseOr=>5,
             BinaryOp::Lessthan => 4,
             BinaryOp::Greaterthan => 4,
             BinaryOp::GE => 4,
@@ -224,6 +269,10 @@ impl BinaryOp{
             BinaryOp::LogicalAnd => true,
             BinaryOp::LogicalOr => true,
             BinaryOp::Assign => false,
+            BinaryOp::BitwiseOr => true,
+            BinaryOp::BitwiseAnd => true,
+            BinaryOp::SHL => true,
+            BinaryOp::SHR => true,
         }
     }
 }
@@ -235,16 +284,37 @@ impl Expresion{
             TokenType::Int => Self::IntLitteral(tokens.next().expect("we just checked that there is another token").clone()),
             TokenType::Float => Self::FloatLitteral(tokens.next().expect("we just checked that there is another token").clone()),
             TokenType::String => Self::StringLitteral(tokens.next().expect("we just checked that there is another token").clone()),
-            TokenType::Ident => Self::VarAccess(tokens.next().expect("we just checked that there is another token").clone()),
             TokenType::True => {tokens.next();Self::True},
             TokenType::False => {tokens.next();Self::False},
+            TokenType::LBrack => Self::ArrayConstructor(ArrayConstructor::parse(tokens)?),
+            TokenType::LBrace => {tokens.next();Self::Block({let mut temp = vec![];while tokens.peek_consume(TokenType::RBrace).is_err(){temp.push(Statment::parse(tokens)?)}temp})},
+            TokenType::Ident => {
+                let name = tokens.next().expect("we just checked that there is another token").clone();
+                if tokens.peek_consume(TokenType::DoubleColon).is_ok(){
+                    let varient_name = tokens.consume(TokenType::Ident)?;
+                    let fields = tokens.optional_list_parse(TokenType::LBrace, TokenType::Comma, TokenType::RBrace)?;
+                    Self::EnumConstructor(EnumConstructor{
+                        enum_name: name,
+                        varient_name,
+                        fields,
+                    })
+                }else if tokens.peek().cannot_end().token_type == (TokenType::LBrace){
+                    let fields = tokens.list_parse(TokenType::LBrace, TokenType::Comma, TokenType::RBrace)?;
+                    Self::StructConstructor(StructConstructor{
+                        struct_name: name,
+                        fields,
+                    })
+                }else{
+                    Self::VarAccess(name)
+                }
+            },
             TokenType::LParen=> {
                 tokens.consume(TokenType::LParen)?;
                 let expr = Expresion::parse(tokens)?;
                 tokens.consume(TokenType::RParen)?;
                 expr
             }
-            _=>Err(ParseError{ expected: vec![TokenType::Minus,TokenType::Int,TokenType::Float,TokenType::String,TokenType::Ident,TokenType::True,TokenType::False], got: tokens.next().unwrap().clone() })?
+            _=>Err(ParseError{ expected: vec![TokenType::Minus,TokenType::Int,TokenType::Float,TokenType::String,TokenType::Ident,TokenType::True,TokenType::False, TokenType::LBrace], got: tokens.next().unwrap().clone() })?
         };
         loop {
             match tokens.peek(){
@@ -276,6 +346,24 @@ impl Expresion{
             }
         }
         Ok(expr)
+    }
+}
+
+impl Parsable for ArrayConstructor{
+    fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,ParseError> {
+        tokens.list_parse(TokenType::LBrack, TokenType::Comma, TokenType::RBrack)
+    }
+}
+
+impl Parsable for FieldConstructor{
+    fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,ParseError> {
+        let name = tokens.consume(TokenType::Ident)?;
+        tokens.consume(TokenType::Colon)?;
+        let value = Box::new(Expresion::parse(tokens)?);
+        Ok(Self{
+            name,
+            value,
+        }) 
     }
 }
 

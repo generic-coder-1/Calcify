@@ -24,6 +24,7 @@ pub enum TokenType {
     Pipe,
     Star,
     Percent,
+    Ampersand,
     //scope stuff
     LBrace,
     RBrace,
@@ -41,6 +42,9 @@ pub enum TokenType {
     BangEqual,
     PlusEqual,
     MinusEqual,
+    DoubleColon,
+    SHR,
+    SHL,
     //idents
     Ident,
     String,
@@ -62,7 +66,7 @@ pub enum TokenType {
     Trait,
     And,
     Or,
-    Gen,
+    Dyn,
     Mut,
     For,
     Continue,
@@ -123,6 +127,14 @@ impl Scanner {
                     .unwrap_or(scanner.gen_token(TokenType::EOF)),
             );
         }
+        let mut i  = 0;
+        while i<tokens.len(){
+            if tokens[i].token_type == TokenType::Comment{
+                tokens.remove(i);
+                break;
+            }
+            i+=1;
+        }
         tokens
     }
     fn scan_token(&mut self, is_last_numeric:bool) -> Option<Token> {
@@ -145,14 +157,15 @@ impl Scanner {
             '@' => TokenType::At,
             '%' => TokenType::Percent,
             '.' => TokenType::Dot,
-            ':' => TokenType::Colon,
             '*' => TokenType::Star,
             ',' => TokenType::Comma,
             '|' => TokenType::Pipe,
+            '&' => TokenType::Ampersand,
+            ':' => either!(self.check(':') => TokenType::DoubleColon; TokenType::Colon),
             '+' => either!(self.check('=') => TokenType::PlusEqual;   TokenType::Plus),
             '=' => either!(self.check('=') => TokenType::EqualEqual;  TokenType::Equal),
-            '<' => either!(self.check('=') => TokenType::LessOrEqual; TokenType::LArrow),
-            '>' => either!(self.check('=') => TokenType::MoreOrEqual; TokenType::RArrow),
+            '<' => either!(self.check('=') => TokenType::LessOrEqual; either!(self.check('<') =>TokenType::SHL; TokenType::LArrow)),
+            '>' => either!(self.check('=') => TokenType::MoreOrEqual; either!(self.check('>') =>TokenType::SHR; TokenType::RArrow)),
             '!' => either!(self.check('=') => TokenType::BangEqual;   TokenType::Bang),
             '-' => {
                 if !is_last_numeric && self.peek(0).unwrap_or(' ').is_numeric(){
@@ -202,7 +215,7 @@ impl Scanner {
                 })
                 .unwrap_or(self.extract_ident()),
             'm' => self.check_keyword("ut", TokenType::Mut)?,
-            'g' => self.check_keyword("en", TokenType::Gen)?,
+            'd' => self.check_keyword("yn", TokenType::Dyn)?,
             a if a.is_numeric() => self.extract_numeric(),
             a if a.is_new_alpha() => self.extract_ident(),
             '"' => loop {

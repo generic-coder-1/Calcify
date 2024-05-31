@@ -1,4 +1,8 @@
+use std::fmt::Debug;
+
 use calcify::{ast::{decl::Program, parser::Parsable}, scanner::Scanner};
+
+
 
 fn main() {
     // dbg!('_'.is_alphanumeric());
@@ -17,13 +21,8 @@ fn main() {
     let tokens = Scanner::scan(
     r#"
     fn main()->Int{
-        let a = 2+3.not_a_func("hi")[0];
-        a=5;
-        while true {
-            print<String>("kys");
-            return 0
-        }
-        while false a+b;
+        let a = 1;
+        -a;
     }
     "#.to_string());
     dbg!(&tokens);

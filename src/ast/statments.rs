@@ -4,7 +4,7 @@ use pub_fields::pub_fields;
 
 use crate::scanner::{Token, TokenType};
 
-use super::{decl::{FunctionDecl, Type}, expresions::Expresion, parser::{Parsable, ParseResult, TokenExt, Wrapper}};
+use super::{decl::{FunctionDecl, Type}, expresions::Expresion, parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}};
 
 #[derive(Debug,Clone)]
 pub enum Statment{
@@ -14,12 +14,13 @@ pub enum Statment{
     If(If),
     While(While),
     Return(Return),
+    ImReturn(Box<Statment>),
     Block(Block),
     Continue,
     Break, 
 }
 
-pub type Return = Option<Expresion>;
+pub type Return = Option<Box<Statment>>;
 pub type Block=Vec<Statment>;
 
 #[derive(Debug,Clone)]
@@ -75,8 +76,18 @@ impl Parsable for Statment{
             TokenType::LBrace => {tokens.next();Self::Block({let mut temp = vec![];while tokens.peek_consume(TokenType::RBrace).is_err(){temp.push(Statment::parse(tokens)?)}temp})},
             _=>{
                 let temp = Self::Expresion(Expresion::parse(tokens)?);
-                tokens.consume(TokenType::SemiColon)?;
-                temp
+                if tokens.peek_consume(TokenType::SemiColon).is_err(){
+                    if tokens.peek().cannot_end().token_type == TokenType::RBrace{
+                        Self::ImReturn(Box::new(temp))
+                    }else{
+                        Err(ParseError{
+                            expected: vec![TokenType::SemiColon],
+                            got: tokens.next().cannot_end().clone(),
+                        })?
+                    } 
+                }else{
+                    temp
+                }
             }
         })
     }
@@ -86,7 +97,7 @@ impl Parsable for Return{
     fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,super::parser::ParseError> {
         tokens.consume(TokenType::Return)?;
         Ok(if tokens.peek_consume(TokenType::SemiColon).is_err(){
-            Some(Expresion::parse(tokens)?)
+            Some(Box::new(Statment::parse(tokens)?))
         }else{
             None
         })
@@ -107,17 +118,20 @@ impl Parsable for While{
 
 impl Parsable for If{
     fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,super::parser::ParseError> {
-        let mut ifs = vec![(IfType::parse(tokens)?,Statment::parse(tokens)?)];
-        while (tokens.next().cannot_end().token_type == TokenType::Else)&&(tokens.next().cannot_end().token_type == TokenType::If) {
-            let condition = IfType::parse(tokens)?;
-            let statment = Statment::parse(tokens)?;
-            ifs.push((condition,statment));
+        tokens.consume(TokenType::If)?;
+        let mut ifs = vec![(IfType::parse(tokens)?,dbg!(Statment::parse(tokens)?))];
+        let mut else_statment = None;
+        while tokens.next().cannot_end().token_type == TokenType::Else{
+            if tokens.peek().cannot_end().token_type == TokenType::If {
+                tokens.next();
+                let condition = IfType::parse(tokens)?;
+                let statment = Statment::parse(tokens)?;
+                ifs.push((condition,statment));
+            }else{
+                else_statment = Some(Box::new(Statment::parse(tokens)?));
+                break;
+            }
         }
-        let else_statment = if tokens.peek_consume(TokenType::Else).is_ok(){
-            Some(Box::new(Statment::parse(tokens)?))
-        }else{
-            None
-        };
         Ok(Self{
             conditionals_and_statments: ifs,
             else_statment,
@@ -127,7 +141,6 @@ impl Parsable for If{
 
 impl Parsable for IfType{
     fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,super::parser::ParseError> {
-        tokens.consume(TokenType::If)?;
         Ok(if tokens.peek_consume(TokenType::Let).is_ok(){
             let pattern = Pattern::parse(tokens)?;
             let expr = Expresion::parse(tokens)?;

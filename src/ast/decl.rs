@@ -94,13 +94,15 @@ pub struct FieldDecl {
 
 #[derive(Debug, Clone)]
 pub enum Type{
-    Singular(SolidType),
-    Tuple(Vec<Type>)
+    ActualType(SolidType),
+    Unit,
+    Array(SolidType),
 } 
 
 #[derive(Debug, Clone)]
 #[pub_fields]
 pub struct SolidType{
+    is_dyn:bool,
     name: Token, //Ident or Self
     generics: Vec<Type>,
 }
@@ -228,7 +230,7 @@ impl Parsable for FuncSig {
         let out = if tokens.peek_consume(TokenType::SmallArrow).is_ok(){
             Type::parse(tokens)?
         }else{
-            Type::Tuple(vec![])
+            Type::Unit
         };
         Ok(Self {
             name,
@@ -344,15 +346,23 @@ impl Parsable for GenericDecl {
 impl Parsable for Type {
     fn parse(tokens: &mut Peekable<Iter<Token>>) -> ParseResult<Self> {
         Ok(if tokens.peek().cannot_end().token_type == TokenType::LParen{
-            Self::Tuple(tokens.list_parse(TokenType::LParen, TokenType::Comma, TokenType::RParen)?)
+            tokens.consume(TokenType::LParen)?;
+            tokens.consume(TokenType::RParen)?;
+            Self::Unit
+        }else if tokens.peek().cannot_end().token_type == TokenType::LBrack{
+            tokens.consume(TokenType::LBrack)?;
+            let res = Self::Array(SolidType::parse(tokens)?);
+            tokens.consume(TokenType::RBrack)?;
+            res
         }else{
-            Self::Singular(SolidType::parse(tokens)?)
+            Self::ActualType(SolidType::parse(tokens)?)
         })
     }
 }
 
 impl Parsable for SolidType{
     fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,ParseError> {
+        let is_dyn = tokens.peek_consume(TokenType::Dyn).is_ok();
         let type_ = tokens.peek_consume_multiple(vec![TokenType::Ident, TokenType::SelfCal])?;
         let generics = tokens.optional_list_parse::<Type>(
             TokenType::LArrow,
@@ -360,6 +370,7 @@ impl Parsable for SolidType{
             TokenType::RArrow,
         )?;
         Ok(Self {
+            is_dyn,
             name: type_,
             generics,
         })
