@@ -98,15 +98,9 @@ pub enum Type{
     Unit,
     Array(SolidType),
     FP(FunctionPointer),
-    DynamicType(Vec<TraitType>)
+    DynamicType(Vec<SolidType>)
 } 
 
-#[derive(Debug,Clone)]
-#[pub_fields]
-pub struct TraitType{
-    name:Token,
-    generics:Vec<Type>
-}
 
 #[derive(Debug, Clone)]
 #[pub_fields]
@@ -361,7 +355,7 @@ impl Parsable for GenericDecl {
 impl Parsable for Type {
     fn parse(tokens: &mut Peekable<Iter<Token>>) -> ParseResult<Self> {
         Ok(if tokens.peek().cannot_end().token_type == TokenType::LParen{
-            let traits = tokens.list_parse::<TraitType>(TokenType::LParen, TokenType::Plus, TokenType::RParen)?;
+            let traits = tokens.list_parse::<SolidType>(TokenType::LParen, TokenType::Plus, TokenType::RParen)?;
             if traits.is_empty(){
                 Self::Unit
             }else{
@@ -376,21 +370,6 @@ impl Parsable for Type {
             res
         }else{
             Self::ActualType(SolidType::parse(tokens)?)
-        })
-    }
-}
-
-impl Parsable for TraitType{
-    fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,ParseError> {
-        let type_ = tokens.consume(TokenType::Ident)?;
-        let generics = tokens.optional_list_parse::<Type>(
-            TokenType::LArrow,
-            TokenType::Comma,
-            TokenType::RArrow,
-        )?;
-        Ok(Self {
-            name: type_,
-            generics,
         })
     }
 }

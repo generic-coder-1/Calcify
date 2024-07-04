@@ -1,13 +1,18 @@
 use std::collections::HashMap;
 
+use pub_fields::pub_fields;
+
 use super::ir_type_data::Function;
 
+#[derive(Debug,Clone)]
+#[pub_fields]
 pub struct IRChunk{
     functions:HashMap<String,Function>,
-    code:Vec<Code>,
+    code:Vec<IRCode>,
 }
 
-pub enum Code{
+#[derive(Debug,Clone)]
+pub enum IRCode{
     VarCreate(u16,Calc),
     VarAssign(u16,Calc),
     FieldAssign(u16,u16,Calc),
@@ -16,6 +21,7 @@ pub enum Code{
     Call(ValueAccess,Vec<u16>),
 }
 
+#[derive(Debug,Clone)]
 pub enum Calc{
     Alloc(u16),
     Clone(ValueAccess),
@@ -40,14 +46,13 @@ pub enum Calc{
     Not(ValueAccess),
 }
 
+#[derive(Debug,Clone)]
 pub enum ValueAccess{
     VarAccess(u16),
     IntConst(u64),
     FloatConst(f64),
-    StringConst(String),
+    StringConst(Box<str>),
     True,
     False,
-    Func(Func),
+    Func(String),
 }
-
-pub struct Func{}

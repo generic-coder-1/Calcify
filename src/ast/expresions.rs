@@ -4,7 +4,7 @@ use pub_fields::pub_fields;
 
 use crate::scanner::{Token, TokenType};
 
-use super::{decl::{TraitType, Type}, parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}, statments::{Block, Statment}};
+use super::{decl::{SolidType, Type}, parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}, statments::{Block, Statment}};
 
 #[derive(Debug,Clone)]
 pub enum Expresion{
@@ -53,7 +53,7 @@ pub type ArrayConstructor = Vec<Expresion>;
 #[pub_fields]
 pub struct Cast{
     expr:Box<Expresion>,
-    traits_to_cast_to:Vec<TraitType>
+    traits_to_cast_to:Vec<SolidType>
 }
 
 #[derive(Debug,Clone)]
@@ -211,7 +211,6 @@ impl Parsable for BinaryOp{
             TokenType::Ampersand,
             TokenType::Pipe,
             TokenType::SHL,
-            TokenType::SHR,
         ])?.token_type{
             TokenType::Plus=>Self::Add,
             TokenType::Minus=>Self::Subtract,
@@ -219,7 +218,7 @@ impl Parsable for BinaryOp{
             TokenType::Slash=>Self::Div,
             TokenType::Percent=>Self::Mod,
             TokenType::LArrow=>Self::Lessthan,
-            TokenType::RArrow=>Self::Greaterthan,
+            TokenType::RArrow=>{if tokens.peek_consume(TokenType::RArrow).is_ok(){Self::Greaterthan}else{Self::SHR}},
             TokenType::LessOrEqual=>Self::LE,
             TokenType::MoreOrEqual=>Self::GE,
             TokenType::EqualEqual=>Self::Equal,
@@ -230,7 +229,6 @@ impl Parsable for BinaryOp{
             TokenType::Ampersand=>Self::BitwiseAnd,
             TokenType::Pipe=>Self::BitwiseOr,
             TokenType::SHL=>Self::SHL,
-            TokenType::SHR=>Self::SHR,
             _=>unreachable!()
         })
     }
@@ -253,7 +251,6 @@ impl BinaryOp{
             TokenType::And|
             TokenType::Or|
             TokenType::SHL|
-            TokenType::SHR|
             TokenType::Equal => true,
             _=>false,
         }
@@ -389,7 +386,7 @@ impl Expresion{
             _=>Err(ParseError{ expected: vec![TokenType::Minus,TokenType::Int,TokenType::Float,TokenType::String,TokenType::Ident,TokenType::True,TokenType::False, TokenType::LBrace], got: tokens.next().unwrap().clone() })?
         };
         if tokens.peek_consume(TokenType::Colon).is_ok(){
-            expr = Self::Cast(Cast{ expr:Box::new(expr), traits_to_cast_to: tokens.list_parse::<TraitType>(TokenType::LParen, TokenType::Plus, TokenType::RParen)?});
+            expr = Self::Cast(Cast{ expr:Box::new(expr), traits_to_cast_to: tokens.list_parse::<SolidType>(TokenType::LParen, TokenType::Plus, TokenType::RParen)?});
         }
         loop {
             match tokens.peek(){

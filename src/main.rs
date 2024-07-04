@@ -1,15 +1,21 @@
-use calcify::{ast::{decl::Program, parser::Parsable}, scanner::Scanner};
+use std::fmt::Debug;
+
+use calcify::{ast::{decl::Program, parser::Parsable}, ir::ir_type_data::IR, scanner::Scanner};
 
 
 
 fn main() {
+
     let tokens = Scanner::scan(
     r#"
-    fn main(){
-        panic;
-        -09
+    trait Foo{
+        fn bar<T>()
     }
     "#.to_string());
     dbg!(&tokens);
-    dbg!(Program::parse(&mut tokens.iter().peekable()));
+    let program = Program::parse(&mut tokens.iter().peekable());
+    dbg!(&program);
+    if let Ok(program) = &program{
+        dbg!(IR::try_from(program));
+    }
 }

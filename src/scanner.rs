@@ -43,7 +43,6 @@ pub enum TokenType {
     PlusEqual,
     MinusEqual,
     DoubleColon,
-    SHR,
     SHL,
     //idents
     Ident,
@@ -81,6 +80,7 @@ pub enum TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub line: usize,
+    pub line_offset:usize,
     pub lexeme: String,
 }
 
@@ -161,11 +161,11 @@ impl Scanner {
             ',' => TokenType::Comma,
             '|' => TokenType::Pipe,
             '&' => TokenType::Ampersand,
+            '>' => TokenType::RArrow,
             ':' => either!(self.check(':') => TokenType::DoubleColon; TokenType::Colon),
             '+' => either!(self.check('=') => TokenType::PlusEqual;   TokenType::Plus),
             '=' => either!(self.check('=') => TokenType::EqualEqual;  TokenType::Equal),
             '<' => either!(self.check('=') => TokenType::LessOrEqual; either!(self.check('<') =>TokenType::SHL; TokenType::LArrow)),
-            '>' => either!(self.check('=') => TokenType::MoreOrEqual; either!(self.check('>') =>TokenType::SHR; TokenType::RArrow)),
             '!' => either!(self.check('=') => TokenType::BangEqual;   TokenType::Bang),
             '-' => {
                 if !is_last_numeric && self.peek(0).unwrap_or(' ').is_numeric(){
@@ -340,6 +340,7 @@ impl Scanner {
         Token {
             token_type,
             line: self.line,
+            line_offset:self.start,
             lexeme: self.source_code[self.start..self.current].to_string(),
         }
     }
