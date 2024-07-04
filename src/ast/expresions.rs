@@ -4,30 +4,57 @@ use pub_fields::pub_fields;
 
 use crate::scanner::{Token, TokenType};
 
-use super::{decl::Type, parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}, statments::{Block, Statment}};
+use super::{decl::{TraitType, Type}, parser::{Parsable, ParseError, ParseResult, TokenExt, Wrapper}, statments::{Block, Statment}};
 
 #[derive(Debug,Clone)]
 pub enum Expresion{
     IntLitteral(Token),//Int
     FloatLitteral(Token),//Float
     StringLitteral(Token),//String
+    TypeAssocatedFunction(TypeAssocatedFunction),
     VarAccess(VarAccess),
     True,
     False,
     FunctionCall(FuncCall),
     FieldAcess(FieldAccess),
     Index(Index),
-    StructConstructor(StructConstructor),
-    EnumConstructor(EnumConstructor),
-    ArrayConstructor(ArrayConstructor),
+    Constructor(Constructor),
+    Cast(Cast),
     Parens(Parens),
     Unary(Unary),
     Binary(Binary),
     Block(Block),
 }
 
+#[derive(Debug,Clone)]
+#[pub_fields]
+pub struct TypeAssocatedFunction{
+    type_:Token,
+    func_name:Token,
+}
+
+#[derive(Debug,Clone)]
+#[pub_fields]
+pub struct Constructor{
+    areana:Option<Box<Expresion>>,
+    object_to_construct:ConstructorType
+}
+
+#[derive(Debug,Clone)]
+pub enum ConstructorType{
+    StructConstructor(StructConstructor),
+    EnumConstructor(EnumConstructor),
+    ArrayConstructor(ArrayConstructor),
+}
 
 pub type ArrayConstructor = Vec<Expresion>;
+
+#[derive(Debug,Clone)]
+#[pub_fields]
+pub struct Cast{
+    expr:Box<Expresion>,
+    traits_to_cast_to:Vec<TraitType>
+}
 
 #[derive(Debug,Clone)]
 #[pub_fields]
@@ -286,24 +313,69 @@ impl Expresion{
             TokenType::String => Self::StringLitteral(tokens.next().expect("we just checked that there is another token").clone()),
             TokenType::True => {tokens.next();Self::True},
             TokenType::False => {tokens.next();Self::False},
-            TokenType::LBrack => Self::ArrayConstructor(ArrayConstructor::parse(tokens)?),
+            TokenType::LBrack => {
+                let cnstrcr = ConstructorType::ArrayConstructor(ArrayConstructor::parse(tokens)?);
+                Self::Constructor(Constructor { areana: 
+                        if tokens.peek_consume(TokenType::At).is_ok(){
+                            Some(Box::new(Expresion::primary(tokens)?))
+                        }else{
+                            None
+                        },
+                        object_to_construct:cnstrcr,
+                    }
+                )
+            },
             TokenType::LBrace => {tokens.next();Self::Block({let mut temp = vec![];while tokens.peek_consume(TokenType::RBrace).is_err(){temp.push(Statment::parse(tokens)?)}temp})},
             TokenType::Ident => {
                 let name = tokens.next().expect("we just checked that there is another token").clone();
                 if tokens.peek_consume(TokenType::DoubleColon).is_ok(){
                     let varient_name = tokens.consume(TokenType::Ident)?;
-                    let fields = tokens.optional_list_parse(TokenType::LBrace, TokenType::Comma, TokenType::RBrace)?;
-                    Self::EnumConstructor(EnumConstructor{
-                        enum_name: name,
-                        varient_name,
-                        fields,
-                    })
+                    let next_token = (*tokens.peek().cannot_end()).clone();
+                    [next_token].iter().peekable().consume_multiple(vec![TokenType::LBrace, TokenType::LParen, TokenType::LArrow])?;
+                    match tokens.peek().cannot_end().token_type{
+                        TokenType::LBrace=>{
+                            let fields = tokens.optional_list_parse(TokenType::LBrace, TokenType::Comma, TokenType::RBrace)?;
+                            let cnstrcr = ConstructorType::EnumConstructor(EnumConstructor{
+                                enum_name: name,
+                                varient_name,
+                                fields,
+                            });
+                            Self::Constructor(Constructor { areana: 
+                                if tokens.peek_consume(TokenType::At).is_ok(){
+                                    Some(Box::new(Expresion::primary(tokens)?))
+                                }else{
+                                    None
+                                },
+                                object_to_construct:cnstrcr,
+                            })
+                        },
+                        TokenType::LArrow =>{
+                            let generics = tokens.list_parse(TokenType::LArrow, TokenType::Comma, TokenType::RArrow)?;
+                            let arguments = tokens.list_parse(TokenType::LParen, TokenType::Comma, TokenType::RParen)?;
+                            Self::FunctionCall(FuncCall { function: Box::new(Self::TypeAssocatedFunction(TypeAssocatedFunction { type_: name, func_name: varient_name })), generics, arguments })
+                        },
+                        TokenType::LParen => {
+                            let generics = vec![];
+                            let arguments = tokens.list_parse(TokenType::LParen, TokenType::Comma, TokenType::RParen)?;
+                            Self::FunctionCall(FuncCall { function: Box::new(Self::TypeAssocatedFunction(TypeAssocatedFunction { type_: name, func_name: varient_name })), generics, arguments })
+                        }
+                        _=>unreachable!()
+                    }
                 }else if tokens.peek().cannot_end().token_type == (TokenType::LBrace){
                     let fields = tokens.list_parse(TokenType::LBrace, TokenType::Comma, TokenType::RBrace)?;
-                    Self::StructConstructor(StructConstructor{
+                    let cnstrcr = ConstructorType::StructConstructor(StructConstructor{
                         struct_name: name,
                         fields,
-                    })
+                    });
+                    Self::Constructor(Constructor { areana: 
+                        if tokens.peek_consume(TokenType::At).is_ok(){
+                            Some(Box::new(Expresion::primary(tokens)?))
+                        }else{
+                            None
+                        },
+                        object_to_construct:cnstrcr,
+                    }
+                )
                 }else{
                     Self::VarAccess(name)
                 }
@@ -316,6 +388,9 @@ impl Expresion{
             }
             _=>Err(ParseError{ expected: vec![TokenType::Minus,TokenType::Int,TokenType::Float,TokenType::String,TokenType::Ident,TokenType::True,TokenType::False, TokenType::LBrace], got: tokens.next().unwrap().clone() })?
         };
+        if tokens.peek_consume(TokenType::Colon).is_ok(){
+            expr = Self::Cast(Cast{ expr:Box::new(expr), traits_to_cast_to: tokens.list_parse::<TraitType>(TokenType::LParen, TokenType::Plus, TokenType::RParen)?});
+        }
         loop {
             match tokens.peek(){
                 Some(token) => {

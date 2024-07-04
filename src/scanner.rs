@@ -57,7 +57,7 @@ pub enum TokenType {
     While,
     Let,
     Return,
-    SelfCal,
+    Self_,
     If,
     Impl,
     Else,
@@ -66,7 +66,6 @@ pub enum TokenType {
     Trait,
     And,
     Or,
-    Dyn,
     Mut,
     For,
     Continue,
@@ -197,7 +196,7 @@ impl Scanner {
                 'o' => self.check_keyword("r", TokenType::For)?,
                 _ => self.extract_ident(),
             },
-            'S' => self.check_keyword("elf", TokenType::SelfCal)?,
+            'S' => self.check_keyword("elf", TokenType::Self_)?,
             's' => self.check_keyword("truct", TokenType::Struct)?,
             'T' => self.check_keyword("rait", TokenType::Trait)?,
             't' => self
@@ -215,7 +214,6 @@ impl Scanner {
                 })
                 .unwrap_or(self.extract_ident()),
             'm' => self.check_keyword("ut", TokenType::Mut)?,
-            'd' => self.check_keyword("yn", TokenType::Dyn)?,
             a if a.is_numeric() => self.extract_numeric(),
             a if a.is_new_alpha() => self.extract_ident(),
             '"' => loop {

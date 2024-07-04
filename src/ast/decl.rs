@@ -97,12 +97,27 @@ pub enum Type{
     ActualType(SolidType),
     Unit,
     Array(SolidType),
+    FP(FunctionPointer),
+    DynamicType(Vec<TraitType>)
 } 
+
+#[derive(Debug,Clone)]
+#[pub_fields]
+pub struct TraitType{
+    name:Token,
+    generics:Vec<Type>
+}
+
+#[derive(Debug, Clone)]
+#[pub_fields]
+pub struct FunctionPointer{
+    args:Vec<Type>,
+    out:Box<Type>,
+}
 
 #[derive(Debug, Clone)]
 #[pub_fields]
 pub struct SolidType{
-    is_dyn:bool,
     name: Token, //Ident or Self
     generics: Vec<Type>,
 }
@@ -346,9 +361,14 @@ impl Parsable for GenericDecl {
 impl Parsable for Type {
     fn parse(tokens: &mut Peekable<Iter<Token>>) -> ParseResult<Self> {
         Ok(if tokens.peek().cannot_end().token_type == TokenType::LParen{
-            tokens.consume(TokenType::LParen)?;
-            tokens.consume(TokenType::RParen)?;
-            Self::Unit
+            let traits = tokens.list_parse::<TraitType>(TokenType::LParen, TokenType::Plus, TokenType::RParen)?;
+            if traits.is_empty(){
+                Self::Unit
+            }else{
+                Self::DynamicType(traits)
+            }
+        }else if tokens.peek().cannot_end().token_type == TokenType::Pipe{
+            Self::FP(FunctionPointer::parse(tokens)?)
         }else if tokens.peek().cannot_end().token_type == TokenType::LBrack{
             tokens.consume(TokenType::LBrack)?;
             let res = Self::Array(SolidType::parse(tokens)?);
@@ -360,17 +380,45 @@ impl Parsable for Type {
     }
 }
 
-impl Parsable for SolidType{
+impl Parsable for TraitType{
     fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,ParseError> {
-        let is_dyn = tokens.peek_consume(TokenType::Dyn).is_ok();
-        let type_ = tokens.peek_consume_multiple(vec![TokenType::Ident, TokenType::SelfCal])?;
+        let type_ = tokens.consume(TokenType::Ident)?;
         let generics = tokens.optional_list_parse::<Type>(
             TokenType::LArrow,
             TokenType::Comma,
             TokenType::RArrow,
         )?;
         Ok(Self {
-            is_dyn,
+            name: type_,
+            generics,
+        })
+    }
+}
+
+impl Parsable for FunctionPointer{
+    fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,ParseError> {
+        let args = tokens.list_parse(TokenType::Pipe, TokenType::Comma, TokenType::Pipe)?;
+        let out = Box::new(if tokens.peek_consume(TokenType::Colon).is_ok(){
+            Type::parse(tokens)?
+        }else{
+            Type::Unit
+        });
+        Ok(Self{
+            args,
+            out,
+        })
+    }
+}
+
+impl Parsable for SolidType{
+    fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,ParseError> {
+        let type_ = tokens.consume_multiple(vec![TokenType::Ident, TokenType::Self_])?;
+        let generics = tokens.optional_list_parse::<Type>(
+            TokenType::LArrow,
+            TokenType::Comma,
+            TokenType::RArrow,
+        )?;
+        Ok(Self {
             name: type_,
             generics,
         })
