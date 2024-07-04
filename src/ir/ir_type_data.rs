@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use pub_fields::pub_fields;
 
-use crate::ast::decl::{EnumDecl, FieldDecl, FuncSig, FunctionPointer, GenericDecl, Program, SolidType, StructDecl, TraitDecl, Type as ASTType, VarientDecl};
+use crate::ast::decl::{EnumDecl, FieldDecl, FuncSig, FunctionDecl, FunctionPointer, GenericDecl, ImplDecl, Program, SolidType, StructDecl, TraitDecl, Type as ASTType, VarientDecl};
 
 use super::IRChunk::IRChunk;
 
@@ -12,7 +12,7 @@ pub struct IR{
     structs:HashMap<String,Struct>,
     enums:HashMap<String,Enum>,
     traits:HashMap<String,Trait>,
-    impls:HashMap<String,Impl>,
+    impls:Vec<Impl>,
     function:HashMap<String,Function>
 }
 
@@ -27,9 +27,9 @@ pub struct Function{
 #[pub_fields]
 pub struct Impl{
     generics:Vec<Generics>,
-    trait_to_impl:ActualType,
+    trait_to_impl:Option<ActualType>,
     type_to_impl_on:Type,
-    funcs:Vec<Function>
+    funcs:Vec<(String,Function)>
 }
 
 #[derive(Debug,Clone)]
@@ -94,8 +94,9 @@ pub struct ActualType{
 }
 
 #[derive(Debug,Clone)]
-#[pub_fields]
-pub struct CompileError{}
+pub enum CompileError{
+    OnlyTraitsCanBeImplimentedOn(Type),
+}
 
 impl TryFrom<&Program> for IR{
     type Error = CompileError;
@@ -107,8 +108,8 @@ impl TryFrom<&Program> for IR{
                     crate::ast::decl::Declaration::StructDecl(struct_) => acc.0.push(struct_),
                     crate::ast::decl::Declaration::EnumDecl(enum_) => acc.1.push(enum_),
                     crate::ast::decl::Declaration::TraitDecl(trait_) => acc.2.push(trait_),
-                    crate::ast::decl::Declaration::FunctionDecl(function_) => acc.3.push(function_),
-                    crate::ast::decl::Declaration::ImplDecl(impl_) => acc.4.push(impl_),
+                    crate::ast::decl::Declaration::ImplDecl(impl_) => acc.3.push(impl_),
+                    crate::ast::decl::Declaration::FunctionDecl(function_) => acc.4.push(function_),
                 }
                 acc
             });
@@ -116,11 +117,47 @@ impl TryFrom<&Program> for IR{
             structs: structs.into_iter().map(<(String, Struct)>::from).collect::<HashMap<String,Struct>>(),
             enums: enums.into_iter().map(<(String, Enum)>::from).collect::<HashMap<String,Enum>>(),
             traits: traits.into_iter().map(<(String, Trait)>::from).collect::<HashMap<String,Trait>>(),
-            impls: HashMap::new(),
-            function: HashMap::new(),
+            impls: impls.into_iter().map(Impl::try_from).collect::<Result<Vec<Impl>,CompileError>>()?,
+            function: functions.into_iter().map(<(String, Function)>::from).collect::<HashMap<String,Function>>(),
         };
         //not done yet
         Ok(ir)
+    }
+}
+
+impl TryFrom<&ImplDecl> for Impl{
+    type Error = CompileError;
+
+    fn try_from(value: &ImplDecl) -> Result<Self,Self::Error> {
+        Ok(Self{
+            generics: value.generics.iter().map(Generics::from).collect::<Vec<Generics>>(),
+            trait_to_impl: {
+                if let Some(type_) = &value.trait_to_impl{
+                    Some({
+                        match Type::from(type_){
+                            Type::Actual(actual)=>actual,
+                            other=>return Err(CompileError::OnlyTraitsCanBeImplimentedOn(other))
+                        }
+                    })
+                }else{
+                    None
+                }
+            },
+            type_to_impl_on: Type::from(&value.type_to_impl_on),
+            funcs: value.funcs.iter().map(<(String,Function)>::from).collect(),
+        })
+    }
+}
+
+impl From<&FunctionDecl> for (String, Function){
+    fn from(value: &FunctionDecl) -> Self {
+        (
+            value.sig.name.lexeme.clone(),
+            Function{
+                tag:<(String,FuncTag)>::from(&value.sig).1,
+                body:todo!()
+            }
+        )
     }
 }
 

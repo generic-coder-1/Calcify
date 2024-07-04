@@ -8,9 +8,7 @@ fn main() {
 
     let tokens = Scanner::scan(
     r#"
-    trait Foo{
-        fn bar<T>()
-    }
+    impl Foo for Int{}
     "#.to_string());
     dbg!(&tokens);
     let program = Program::parse(&mut tokens.iter().peekable());
