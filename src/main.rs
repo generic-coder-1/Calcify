@@ -5,8 +5,9 @@ use calcify::{ast::{decl::Program, parser::Parsable}, scanner::Scanner};
 fn main() {
     let tokens = Scanner::scan(
     r#"
-    fn main(a:(Printable + Yes<()>))->Int{
-        [9,0]@Arena::new<[A]>();
+    fn main(){
+        panic;
+        -09
     }
     "#.to_string());
     dbg!(&tokens);

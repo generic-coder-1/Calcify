@@ -18,6 +18,7 @@ pub enum Statment{
     Block(Block),
     Continue,
     Break, 
+    Panic,
 }
 
 pub type Return = Option<Box<Statment>>;
@@ -68,14 +69,15 @@ impl Parsable for Statment{
         Ok(match tokens.peek().cannot_end().token_type{
             TokenType::Let=>Self::VarCreation(VarCreation::parse(tokens)?),
             TokenType::Fn=>Self::FuncCreation(FunctionDecl::parse(tokens)?),
-            TokenType::Continue=>{tokens.next();Self::Continue},
-            TokenType::Break=>{tokens.next();Self::Break},
+            TokenType::Continue=>{tokens.next(); tokens.consume(TokenType::SemiColon)?;Self::Continue},
+            TokenType::Break=>{tokens.next(); tokens.consume(TokenType::SemiColon)?;Self::Break},
             TokenType::If=>Self::If(If::parse(tokens)?),
             TokenType::While=>Self::While(While::parse(tokens)?),
             TokenType::Return=>Self::Return(Return::parse(tokens)?),
             TokenType::LBrace => {tokens.next();Self::Block({let mut temp = vec![];while tokens.peek_consume(TokenType::RBrace).is_err(){temp.push(Statment::parse(tokens)?)}temp})},
+            TokenType::Panic => {tokens.next(); tokens.consume(TokenType::SemiColon)?;Self::Panic}
             _=>{
-                let temp = Self::Expresion(Expresion::parse(tokens)?);
+                let temp = Self::Expresion(Expresion::parse(tokens).map_err(|mut err|{err.expected.append(&mut vec![TokenType::Let,TokenType::Fn,TokenType::Continue,TokenType::Break,TokenType::If,TokenType::While,TokenType::Return,TokenType::LBrace,TokenType::Panic]); err})?);
                 if tokens.peek_consume(TokenType::SemiColon).is_err(){
                     if tokens.peek().cannot_end().token_type == TokenType::RBrace{
                         Self::ImReturn(Box::new(temp))

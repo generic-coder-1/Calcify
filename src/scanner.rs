@@ -70,6 +70,7 @@ pub enum TokenType {
     For,
     Continue,
     Break,
+    Panic,
     //other stuff
     Error,
     EOF,
@@ -214,6 +215,7 @@ impl Scanner {
                 })
                 .unwrap_or(self.extract_ident()),
             'm' => self.check_keyword("ut", TokenType::Mut)?,
+            'p' => self.check_keyword("anic", TokenType::Panic)?,
             a if a.is_numeric() => self.extract_numeric(),
             a if a.is_new_alpha() => self.extract_ident(),
             '"' => loop {
