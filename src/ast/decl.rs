@@ -82,7 +82,14 @@ pub struct StructDecl {
 #[pub_fields]
 pub struct GenericDecl {
     name: Token, //Ident
-    constraints: Vec<Type>,
+    constraints: Vec<TraitType>,
+}
+
+#[derive(Debug, Clone)]
+#[pub_fields]
+pub struct TraitType{
+    name: Token, //Ident or Self
+    generics: Vec<Type>,
 }
 
 #[derive(Debug, Clone)]
@@ -94,11 +101,11 @@ pub struct FieldDecl {
 
 #[derive(Debug, Clone)]
 pub enum Type{
-    ActualType(SolidType),
+    PhysicalType(SolidType),
     Unit,
     Array(SolidType),
     FP(FunctionPointer),
-    DynamicType(Vec<SolidType>)
+    DynamicType(Vec<TraitType>)
 } 
 
 
@@ -336,7 +343,7 @@ impl Parsable for GenericDecl {
         let constraints = if tokens.peek_consume(TokenType::Colon).is_ok() {
             let mut temp = vec![];
             loop{
-                temp.push(Type::parse(tokens)?);
+                temp.push(TraitType::parse(tokens)?);
                 if tokens.peek_consume(TokenType::Plus).is_err(){
                     break;
                 }
@@ -355,7 +362,7 @@ impl Parsable for GenericDecl {
 impl Parsable for Type {
     fn parse(tokens: &mut Peekable<Iter<Token>>) -> ParseResult<Self> {
         Ok(if tokens.peek().cannot_end().token_type == TokenType::LParen{
-            let traits = tokens.list_parse::<SolidType>(TokenType::LParen, TokenType::Plus, TokenType::RParen)?;
+            let traits = tokens.list_parse::<TraitType>(TokenType::LParen, TokenType::Plus, TokenType::RParen)?;
             if traits.is_empty(){
                 Self::Unit
             }else{
@@ -369,7 +376,7 @@ impl Parsable for Type {
             tokens.consume(TokenType::RBrack)?;
             res
         }else{
-            Self::ActualType(SolidType::parse(tokens)?)
+            Self::PhysicalType(SolidType::parse(tokens)?)
         })
     }
 }
@@ -390,6 +397,21 @@ impl Parsable for FunctionPointer{
 }
 
 impl Parsable for SolidType{
+    fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,ParseError> {
+        let type_ = tokens.consume_multiple(vec![TokenType::Ident, TokenType::Self_])?;
+        let generics = tokens.optional_list_parse::<Type>(
+            TokenType::LArrow,
+            TokenType::Comma,
+            TokenType::RArrow,
+        )?;
+        Ok(Self {
+            name: type_,
+            generics,
+        })
+    }
+}
+
+impl Parsable for TraitType{
     fn parse(tokens: &mut Peekable<Iter<Token>>)->Result<Self,ParseError> {
         let type_ = tokens.consume_multiple(vec![TokenType::Ident, TokenType::Self_])?;
         let generics = tokens.optional_list_parse::<Type>(
